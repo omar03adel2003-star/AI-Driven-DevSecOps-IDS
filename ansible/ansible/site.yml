@@ -1,0 +1,8 @@
+---
+- hosts: honeypot
+  roles:
+    - honeypot
+
+- hosts: suricata
+  roles:
+    - suricata
