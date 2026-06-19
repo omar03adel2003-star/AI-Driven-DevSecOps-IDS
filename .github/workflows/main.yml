@@ -25,15 +25,25 @@ jobs:
 
   # 2. فحص ملفات Ansible (site.yml و block_attacker وغيرها)
     # 2. فحص ملفات Ansible
+    # 2. فحص ملفات Ansible
   Ansible-Checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: Install Ansible
         run: pip install ansible
+
+      # خطوة "السحر" اللي هتمسح أي UTF-16 أو رموز مخفية
+      - name: Force Fix Encoding (Anti-Windows)
+        run: |
+          sudo apt-get install -y dos2unix
+          find ansible -type f -exec dos2unix {} \;
+          # مسح أي رموز مخفية في بداية الملفات
+          find ansible -type f -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
+
       - name: Check Ansible Syntax
         run: |
-          # هندخل جوه فولدر ansible عشان يشوف الـ roles والـ cfg
           cd ansible
           ansible-playbook site.yml --syntax-check
           ansible-playbook block_attacker.yml --syntax-check
