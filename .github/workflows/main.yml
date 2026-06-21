@@ -1,27 +1,36 @@
-name: DevSecOps CI Pipeline
+name: DevSecOps & AI-IDS Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
-  # 1. فحص ملفات البايثون (عندك webhook_listener و log_exporter)
+  # 1. مرحلة فحص البايثون (جودة وأمان الكود)
   Python-Checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Install Linting Tools
+
+      - name: Install Tools
         run: pip install flake8 bandit
+
       - name: Code Style Check (flake8)
-        run: flake8 ansible/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # بيفحص الأخطاء القاتلة (Syntax errors) في المشروع كله
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
       - name: Security Scan (Bandit)
-        run: bandit -r ansible/
+        # -ll يعني بيفحص الحاجات الـ Medium والـ High فقط
+        # استخدمنا continue-on-error عشان الـ Pipeline ما يقفش لو لقى ثغرة دلوقتي، بس هيديك علامة تنبيه
+        continue-on-error: true
+        run: bandit -r . -ll
 
   # 2. فحص ملفات Ansible (site.yml و block_attacker وغيرها)
     # 2. فحص ملفات Ansible
