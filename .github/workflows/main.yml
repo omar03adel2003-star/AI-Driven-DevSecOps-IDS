@@ -1,12 +1,3 @@
-name: "DevSecOps Pipeline: AI-IDS & GNS3 Automation"
-
-on:
-  push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main" ]
-
-jobs:
   # --- المرحلة الأولى: كل الفحوصات الأمنية (Security Checks) ---
   Security-Audit:
     name: "Run All Security Checks"
@@ -23,7 +14,15 @@ jobs:
           python-version: '3.10'
 
       - name: Install Tools
-        run: pip install flake8 bandit pip-audit ansible
+        run: |
+          sudo apt-get update && sudo apt-get install -y dos2unix
+          pip install flake8 bandit pip-audit ansible
+
+      - name: Force Fix Encoding (Anti-Windows Fix)
+        # الخطوة دي بتمسح أي حروف غريبة أو تنسيق ويندوز بيبوظ الـ Ansible
+        run: |
+          find ansible -type f -exec dos2unix {} \;
+          find ansible -type f -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
 
       - name: Python Lint & Security Scan
         run: |
@@ -40,34 +39,3 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- المرحلة الثانية: التنبيه المباشر بنتيجة الفحص (Direct Notification) ---
-  Slack-Direct-Notify:
-    name: "Direct Slack Notification"
-    needs: Security-Audit
-    runs-on: ubuntu-latest
-    if: always() # عشان يبعتلك سواء نجح أو فشل فوراً
-    steps:
-      - name: Notify Slack
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_USERNAME: 'Security-Bot'
-          SLACK_TITLE: 'Audit Result: ${{ needs.Security-Audit.result }}'
-          SLACK_MESSAGE: 'The Security Audit for Project "Abo 3mera" is finished. Result: ${{ needs.Security-Audit.result }} 🛡️'
-          SLACK_COLOR: ${{ needs.Security-Audit.result == 'success' && 'good' || 'danger' }}
-
-  # --- المرحلة الثالثة: التنفيذ (Deployment) ---
-  Deploy-to-GNS3:
-    name: "Deploy to GNS3 Environment"
-    needs: Security-Audit # بيعتمد على نجاح الفحص
-    runs-on: self-hosted 
-    if: success() # مش هيبدأ غير لو الفحص اللي فوق "نجح" (أخضر)
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Execute Ansible Playbook
-        run: |
-          cd ansible
-          ansible-playbook -i inventory.ini site.yml --extra-vars "ansible_ssh_pass=${{ secrets.SARA_PASSWORD }}"
