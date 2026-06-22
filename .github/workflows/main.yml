@@ -7,76 +7,67 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # 1. فحص البايثون
-  Python-Security-Audit:
-    name: "Python Quality & Security Audit"
+  # --- المرحلة الأولى: كل الفحوصات الأمنية (Security Checks) ---
+  Security-Audit:
+    name: "Run All Security Checks"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
-      - run: |
-          pip install flake8 bandit pip-audit
+
+      - name: Install Tools
+        run: pip install flake8 bandit pip-audit ansible
+
+      - name: Python Lint & Security Scan
+        run: |
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           bandit -r . -ll || true
           pip-audit || true
 
-  # 2. فحص الأنسيبل
-  Ansible-Validation:
-    name: "Ansible Syntax Check"
-    needs: Python-Security-Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          pip install ansible
+      - name: Ansible Syntax Check
+        run: |
           cd ansible
           ansible-playbook site.yml --syntax-check
 
-  # 3. فحص التسريبات (Secrets)
-  Secrets-Scanning:
-    name: "Gitleaks Secrets Scan"
-    needs: Ansible-Validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - name: Gitleaks Secrets Scan
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # --- المرحلة الجديدة: التنبيه بنتيجة الفحص ---
-  Notify-Audit-Result:
-    name: "Notify Audit Result to Slack"
-    needs: Secrets-Scanning # هتشتغل بمجرد ما الـ 3 فحوصات اللي فوق يخلصوا
+  # --- المرحلة الثانية: التنبيه المباشر بنتيجة الفحص (Direct Notification) ---
+  Slack-Direct-Notify:
+    name: "Direct Slack Notification"
+    needs: Security-Audit
     runs-on: ubuntu-latest
-    if: always() # يبعت رسالة سواء الفحص نجح أو فشل
+    if: always() # عشان يبعتلك سواء نجح أو فشل فوراً
     steps:
-      - name: Send Notification to Slack
+      - name: Notify Slack
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_CHANNEL: '#general'
-          SLACK_USERNAME: 'Security Auditor'
-          SLACK_TITLE: 'Security Audit: ${{ needs.Secrets-Scanning.result }}'
-          SLACK_MESSAGE: |
-             *Project:* Abo 3mera DevSecOps 🛡️
-             *Status:* The Security Audit Phase has finished with status: `${{ needs.Secrets-Scanning.result }}`.
-             *Next Step:* Starting Deployment to GNS3/EVE-NG... 🚀
-          SLACK_COLOR: ${{ needs.Secrets-Scanning.result == 'success' && 'good' || 'danger' }}
+          SLACK_USERNAME: 'Security-Bot'
+          SLACK_TITLE: 'Audit Result: ${{ needs.Security-Audit.result }}'
+          SLACK_MESSAGE: 'The Security Audit for Project "Abo 3mera" is finished. Result: ${{ needs.Security-Audit.result }} 🛡️'
+          SLACK_COLOR: ${{ needs.Security-Audit.result == 'success' && 'good' || 'danger' }}
 
-  # 4. التنفيذ (Deployment) - هتشتغل في نفس الوقت أو بعد التنبيه
+  # --- المرحلة الثالثة: التنفيذ (Deployment) ---
   Deploy-to-GNS3:
     name: "Deploy to GNS3 Environment"
-    needs: Notify-Audit-Result # بتعتمد على التنبيه
+    needs: Security-Audit # بيعتمد على نجاح الفحص
     runs-on: self-hosted 
-    if: success() # مش هتبدأ غير لو الفحص اللي فات "نجح" فعلاً
+    if: success() # مش هيبدأ غير لو الفحص اللي فوق "نجح" (أخضر)
     steps:
-      - uses: actions/checkout@v4
-      - name: "Execute Ansible Playbook"
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Execute Ansible Playbook
         run: |
           cd ansible
           ansible-playbook -i inventory.ini site.yml --extra-vars "ansible_ssh_pass=${{ secrets.SARA_PASSWORD }}"
