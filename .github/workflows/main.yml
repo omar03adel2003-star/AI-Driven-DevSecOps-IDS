@@ -14,30 +14,25 @@ jobs:
     steps:
       - name: "Step 1: Checkout Code"
         uses: actions/checkout@v4
-
       - name: "Step 2: Set up Python Environment"
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
-
       - name: "Step 3: Install Security & Audit Tools"
         run: |
           python -m pip install --upgrade pip
           pip install flake8 bandit pip-audit
-
       - name: "Step 4: Linting (Code Style Check)"
         run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-
       - name: "Step 5: Dependency Audit (Checking for CVEs)"
         continue-on-error: true
         run: pip-audit
-
       - name: "Step 6: SAST (Static Analysis Security Testing)"
         continue-on-error: true
         run: bandit -r . -ll
 
-  # --- المرحلة الثانية: فحص ملفات Ansible (تعتمد على نجاح المرحلة الأولى) ---
+  # --- المرحلة الثانية: فحص ملفات Ansible ---
   Ansible-Validation:
     name: "Ansible Syntax & Environment Fix"
     needs: Python-Security-Audit
@@ -45,16 +40,13 @@ jobs:
     steps:
       - name: "Step 1: Checkout Code"
         uses: actions/checkout@v4
-
       - name: "Step 2: Install Ansible"
         run: pip install ansible
-
       - name: "Step 3: Fix Windows Encoding (dos2unix)"
         run: |
           sudo apt-get install -y dos2unix
           find ansible -type f -exec dos2unix {} \;
           find ansible -type f -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
-
       - name: "Step 4: Ansible Syntax Check"
         working-directory: ./ansible
         run: |
@@ -72,7 +64,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: "Step 2: Run Gitleaks"
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -82,13 +73,29 @@ jobs:
   Deploy-to-GNS3:
     name: "Deploy to GNS3 Environment"
     needs: Secrets-Scanning
-    runs-on: self-hosted # <--- لازم تكون مسطب الـ Runner على جهازك
+    runs-on: self-hosted 
     steps:
       - name: "Step 1: Checkout Code"
         uses: actions/checkout@v4
-
       - name: "Step 2: Execute Ansible Playbook"
-        # هنا التعديل: هنزود سطر الـ extra-vars عشان نبعت الباسورد
         run: |
           cd ansible
           ansible-playbook -i inventory.ini site.yml --extra-vars "ansible_ssh_pass=${{ secrets.SARA_PASSWORD }}"
+
+  # --- المرحلة الخامسة: التنبيهات (Slack Notification) ---
+  Slack-Notification:
+    name: "Slack Notification"
+    needs: [Deploy-to-GNS3] # هتستنى الـ Deploy يخلص
+    runs-on: ubuntu-latest
+    if: always() # مهم جداً: يشتغل سواء الـ Pipeline نجح أو فشل عشان يبلغك بالنتيجة
+    steps:
+      - name: Send Notification to Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: '#general' 
+          SLACK_USERNAME: 'GitHub Actions - Abo 3mera'
+          SLACK_ICON: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+          SLACK_TITLE: 'Project Status: ${{ job.status }}'
+          SLACK_MESSAGE: 'DevSecOps Pipeline for project "Abo 3mera" finished with status: ${{ job.status }} 🚀'
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }} # أخضر لو نجح، أحمر لو فشل
