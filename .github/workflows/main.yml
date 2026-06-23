@@ -80,15 +80,15 @@ jobs:
 
   # --- المرحلة الرابعة: التنفيذ (Deployment) - ده اللي بيتربط بالـ GNS3 ---
   # ملاحظة: دي هتشتغل بس لو عندك Self-hosted Runner شغال ومربوط بـ GNS3
-  Deploy-to-EvENg:
-    name: "Deploy to EVENg Environment"
-    needs: Secrets-Scanning
-    runs-on: self-hosted # <--- تأكد إن الـ Runner بتاعك متسطب وجاهز
-    steps:
-      - name: "Step 1: Checkout Code"
-        uses: actions/checkout@v4
+ Deploy-to-EvENg:
+  name: "Deploy to EVENg Environment"
+  needs: Secrets-Scanning
+  runs-on: self-hosted
+  steps:
+    - name: "Step 1: Checkout Code"
+      uses: actions/checkout@v4
 
-      - name: "Step 2: Execute Ansible Playbook"
-        run: |
-          cd ansible
-          ansible-playbook -i inventory.ini site.yml
+    - name: "Step 2: Execute Ansible Playbook"
+      run: |
+        # التنفيذ مباشرة لأن كل الملفات في الـ Root
+        ansible-playbook -i inventory.ini site.yml
