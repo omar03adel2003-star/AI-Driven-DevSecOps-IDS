@@ -1,4 +1,4 @@
-name: "DevSecOps Pipeline: AI-IDS & GNS3 Automation"
+name: "DevSecOps Pipeline: AI-IDS & EVENG Automation"
 
 on:
   push:
