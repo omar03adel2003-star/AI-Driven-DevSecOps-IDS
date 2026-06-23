@@ -1,8 +1,115 @@
 ---
-- hosts: honeypot
-  roles:
-    - honeypot
+- name: 1. Setup Honeypot Node
+  hosts: honeypot
+  become: yes
+  tasks:
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
 
-- hosts: suricata
-  roles:
-    - suricata
+    - name: Run Cowrie
+      docker_container:
+        name: cowrie-container
+        image: cowrie/cowrie
+        state: started
+        restart_policy: always
+        ports: ["2222:2222"]
+
+    - name: Run Dionaea
+      docker_container:
+        name: dionaea-all
+        image: dinotools/dionaea
+        state: started
+        restart_policy: always
+        ports: ["80:80", "21:21"]
+
+- name: 2. Setup Suricata Node & Execute AI Log Exporter
+  hosts: suricata
+  become: yes
+  vars:
+    local_script_path: "./log_exporter.py"
+    local_model_path: "./model.pkl"
+    local_scaler_path: "./scaler.pkl"
+  tasks:
+    - name: Install Dependencies
+      apt:
+        name: [python3-pip, docker.io]
+        state: present
+        update_cache: yes
+
+    - name: Install AI Libraries
+      pip:
+        name: [prometheus-client, scikit-learn, numpy, pandas]
+        extra_args: "--break-system-packages"
+
+    - name: Copy AI Model
+      copy:
+        src: "{{ local_model_path }}"
+        dest: "/opt/model.pkl"
+        mode: '0644'
+
+    - name: Copy AI Scaler
+      copy:
+        src: "{{ local_scaler_path }}"
+        dest: "/opt/scaler.pkl"
+        mode: '0644'
+
+    - name: Copy Exporter Script
+      copy:
+        src: "{{ local_script_path }}"
+        dest: "/opt/log_exporter.py"
+        mode: '0755'
+
+    # --- تشغيل اللوج اكسبورتر أوتوماتيك على مكنة سوريكاتا بنفس الكوماند بتاعك ---
+    - name: Run AI Log Exporter in Background
+      shell: "nohup python3 /opt/log_exporter.py > /var/log/ai_exporter.log 2>&1 &"
+      async: 10
+      poll: 0
+
+- name: 3. Setup Local Monitoring & Execute Webhook Listener
+  hosts: localhost
+  connection: local
+  become: yes
+  tasks:
+    - name: Install Docker on Localhost
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Run Prometheus
+      docker_container:
+        name: prometheus_local
+        image: prom/prometheus
+        state: started
+        restart_policy: always
+        ports: ["9090:9090"]
+        volumes:
+          - "{{ playbook_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml"
+          - "prom_data:/prometheus"
+
+    - name: Run Grafana
+      docker_container:
+        name: grafana_local
+        image: grafana/grafana
+        state: started
+        user: "0:0"
+        restart_policy: always
+        ports: ["3000:3000"]
+        volumes:
+          - "grafana_data:/var/lib/grafana"
+
+    # --- تأمين وجود ملف الـ Webhook Listener على مكنة الأنسيبل ---
+    - name: Copy Webhook Listener to Localhost
+      copy:
+        src: "./webhook_listener.py"
+        dest: "/home/sara/grad-proj/webhook_listener.py"
+        mode: '0755'
+
+    # --- تشغيل الـ Webhook أوتوماتيك باستخدام الـ Virtual Environment والمسار بتاعك ---
+    - name: Run Asynchronous Webhook Listener in Background
+      shell: "nohup /home/sara/grad-proj/myenv/bin/python3 /home/sara/grad-proj/webhook_listener.py > /home/sara/grad-proj/webhook.log 2>&1 &"
+      async: 10
+      poll: 0
