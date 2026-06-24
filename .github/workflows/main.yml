@@ -79,16 +79,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --- المرحلة الرابعة: التنفيذ (Deployment) - ده اللي بيتربط بالـ GNS3 ---
-  # ملاحظة: دي هتشتغل بس لو عندك Self-hosted Runner شغال ومربوط بـ GNS3
- Deploy-to-EvENg:
-  name: "Deploy to EVENg Environment"
-  needs: Secrets-Scanning
-  runs-on: self-hosted
-  steps:
-    - name: "Step 1: Checkout Code"
-      uses: actions/checkout@v4
+  Deploy-to-EvENg:
+    name: "Deploy to EVENg Environment"
+    needs: Secrets-Scanning
+    runs-on: self-hosted
+    steps:
+      - name: "Step 1: Checkout Code"
+        uses: actions/checkout@v4
 
-    - name: "Step 2: Execute Ansible Playbook"
-      run: |
-        # التنفيذ مباشرة لأن كل الملفات في الـ Root
-        ansible-playbook -i inventory.ini site.yml
+      - name: "Step 2: Execute Ansible Playbook"
+        run: |
+          cd ansible
+          ansible-playbook -i demo_inventory.ini demo_site.yml
